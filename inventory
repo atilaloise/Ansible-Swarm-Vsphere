@@ -1,0 +1,17 @@
+[SWARM_VMS]
+SRV-SWARM-01 deploy_vsphere_datastore='Datastore' guest_custom_ip='192.168.0.2' guest_notes='Master 1 - Created with Ansible'
+SRV-SWARM-02 deploy_vsphere_datastore='Datastore' guest_custom_ip='192.168.0.3' guest_notes='Master 2 - Created with Ansible'
+SRV-SWARM-03 deploy_vsphere_datastore='Datastore' guest_custom_ip='192.168.0.4' guest_notes='Master 3 - Created with Ansible'
+SRV-SWARM-04 deploy_vsphere_datastore='Datastore' guest_custom_ip='192.168.0.5' guest_notes='Master 4 - Created with Ansible'
+SRV-SWARM-05 deploy_vsphere_datastore='Datastore' guest_custom_ip='192.168.0.6' guest_notes='Master 5 - Created with Ansible'
+
+
+[SWARM_HOSTS]
+SRV-SWARM-01 ansible_host=192.168.0.2
+SRV-SWARM-02 ansible_host=192.168.0.3
+SRV-SWARM-03 ansible_host=192.168.0.4
+SRV-SWARM-04 ansible_host=192.168.0.5
+SRV-SWARM-05 ansible_host=192.168.0.6
+
+[SWARM_HOSTS:vars]
+ansible_python_interpreter=/usr/bin/python3

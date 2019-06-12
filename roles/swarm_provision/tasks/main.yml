@@ -1,0 +1,64 @@
+---
+
+- name: Check if docker is installed
+  shell: docker info
+  changed_when: False
+  register: docker_info
+
+- name: Creating swarm Cluster
+  shell: docker swarm init --advertise-addr {{ ansible_host }}:2377
+  when: "docker_info.stdout.find('Swarm: active') == -1 and inventory_hostname == groups['SWARM_HOSTS'][0]"
+
+- name: Get manager token
+  shell: docker swarm join-token -q manager
+  changed_when: False
+  register: docker_manager_token
+  delegate_to: "{{ groups['SWARM_HOSTS'][0] }}"
+  when: "docker_info.stdout.find('Swarm: active') == -1"
+
+- name: Adding other managers to cluster
+  shell: docker swarm join --token "{{ docker_manager_token.stdout }}" {{ hostvars[groups['SWARM_HOSTS'][0]].ansible_host }}:2377
+  changed_when: False
+  when: "docker_info.stdout.find('Swarm: active') == -1
+    and docker_info.stdout.find('Swarm: pending') == -1
+    and 'SWARM_HOSTS' in group_names
+    and inventory_hostname != groups['SWARM_HOSTS'][0]"
+
+- name: Creating frontend dir
+  file:
+    path: /srv/traefik/conf
+    state: directory
+    mode: 0755
+
+- name: Creating frontend certs dir
+  file:
+    path: /srv/traefik/cert
+    state: directory
+    mode: 0755
+
+- name: Sending Frontend conf file
+  copy:
+    src: traefik.toml
+    dest: /srv/traefik/conf/traefik.toml
+    owner: root
+    group: root
+    mode: 0766
+
+- name: send Frontend Cert
+  copy:
+    src: certificate.crt
+    dest: /srv/traefik/cert/STAR_tce_ro_gov_br.crt
+    owner: root
+    group: root
+    mode: 0766
+
+- name: send Frontend Key
+  copy:
+    src: key.key
+    dest: /srv/traefik/cert/certificado.key
+    owner: root
+    group: root
+    mode: 0766
+
+- name: Installing vsphere storage plugin
+  shell: docker plugin install --grant-all-permissions --alias vsphere vmware/vsphere-storage-for-docker:latest

@@ -1,0 +1,22 @@
+---
+
+- name: Loading Vars
+  include_vars: "vars.yml"
+
+- name: Creating backend network for Portainer
+  shell: docker network create --driver overlay --attachable --subnet=192.168.183.0/24 portainer
+
+- name: Creating frontend network for Traefik
+  shell: docker network create --driver overlay --attachable --subnet=192.168.173.0/24 app
+
+- name: Sending YAML to deploy
+  template:
+    src: management.yml.j2
+    dest: /root/management.yml
+    owner: root
+    group: root
+    mode: 0766
+
+
+- name: Deploying Management STACK
+  shell: docker stack deploy -c /root/management.yml MANAGEMENT

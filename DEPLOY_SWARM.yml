@@ -1,0 +1,47 @@
+---
+
+- name: Creating VIrtual Machines
+  hosts: SWARM_VMS
+  gather_facts: false
+  vars_prompt:
+  - name: "deploy_vsphere_user"
+    prompt: "USERNAME"
+    private: no
+  - name: "deploy_vsphere_password"
+    prompt: "PASSWORD" 
+    private: yes
+  roles:
+    - deploy_vm
+  tags: vsphere, vm
+
+- name: Trying to connect to the hosts
+  gather_facts: false
+  hosts: SWARM_HOSTS
+  roles:
+    - check
+  tags: check
+
+- name: Installing docker 
+  hosts: SWARM_HOSTS
+  roles:
+    - install_docker
+  tags: docker, install
+
+
+- name: Installing Plus packages
+  hosts: SWARM_HOSTS
+  roles:
+    - plus
+  tags: adicionais
+
+- name: Creating SWARM Cluster
+  hosts: SWARM_HOSTS
+  roles:
+    - swarm_provision
+  tags: swarm, provision
+
+- name: Deploying Management stack
+  hosts: SWARM_HOSTS[0]
+  roles:
+    - environment
+  tags: environment

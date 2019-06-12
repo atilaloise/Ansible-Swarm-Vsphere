@@ -1,0 +1,8 @@
+---
+
+- name: Getting Vm information
+  setup:
+  retries: 10
+  delay: 3
+  register: result
+  until: result is success

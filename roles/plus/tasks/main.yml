@@ -1,0 +1,11 @@
+---
+
+- name: Loading Vars
+  include_vars: "vars.yml"
+
+- name: Installing Minio client
+  shell: wget https://dl.min.io/client/mc/release/linux-amd64/mc -P /usr/bin && chmod +x /usr/bin/mc
+
+
+- name: Setup Minio Client
+  shell: /usr/bin/mc config host add minio https://minio.lab.test user aeouhaeuohaeuoep4ssw0Rd

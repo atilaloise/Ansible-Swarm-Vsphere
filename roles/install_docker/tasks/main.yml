@@ -1,0 +1,175 @@
+---
+
+- name: Setting Docker version REPO
+  file:
+    dest: "/etc/apt/preferences.d/docker-ce.pref"
+    state: "absent"
+  when: not docker__version | d()
+
+- name: Setting Docker version APT REPO
+  template:
+    src: "etc/apt/preferences.d/docker-ce.pref.j2"
+    dest: "/etc/apt/preferences.d/docker-ce.pref"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  when: docker__version | d()
+
+- name: INstalling docker dependencies
+  apt:
+    name: "{{ docker__package_dependencies + docker__pip_dependencies }}"
+    update_cache: true
+
+- name: Configuring apt keys
+  apt_key:
+    id: "{{ docker__apt_key_id }}"
+    url: "{{ docker__apt_key_url }}"
+
+- name: Configuring REPO
+  apt_repository:
+    repo: "{{ docker__apt_repository }}"
+    update_cache: true
+
+- name: InstallingDocker
+  apt:
+    name: "docker-{{ docker__edition }}"
+    state: "{{ docker__state }}"
+
+- name: Checking docker compose
+  stat:
+    path: "/usr/local/bin/docker-compose"
+  register: docker__register_docker_compose
+
+- name: Removing compose installed without PIP
+  file:
+    path: "/usr/local/bin/docker-compose"
+    state: "absent"
+  when:
+    - docker__register_docker_compose.stat.exists
+    - docker__register_docker_compose.stat.isreg | d(false)
+
+- name: Installing  Virtualenv
+  pip:
+    name: "virtualenv"
+
+- name: Installing Python
+  pip:
+    name: >
+      {{ item.name }}{% if item.version | d() %}=={{ item.version }}{% endif %}
+    virtualenv: "{{ docker__pip_virtualenv }}"
+    state: "{{ item.state | d('present') }}"
+  loop: "{{ docker__default_pip_packages + docker__pip_packages }}"
+  when: item.name | d()
+
+- name: Python symbolic links /usr/local/bin/python-docker
+  file:
+    path: "/usr/local/bin/python-docker"
+    src: "{{ docker__pip_virtualenv }}/bin/python"
+    state: "link"
+
+- name: Selecting symbolic links /usr/local/bin
+  file:
+    path: "{{ item.path }}"
+    src: "{{ item.src }}"
+    state: "link"
+  loop: "{{ docker__default_pip_packages + docker__pip_packages }}"
+  when:
+    - item.state | d("present") != "absent"
+    - item.path | d() and item.src | d()
+
+# - name: Add user(s) to "docker" group
+#   user:
+#     name: "{{ item }}"
+#     groups: "docker"
+#     append: true
+#   loop: "{{ docker__users }}"
+
+- name: Creating docker configuration files
+  file:
+    path: "{{ item }}"
+    state: "directory"
+    owner: "root"
+    group: "root"
+    mode: "0755"
+  loop:
+    - "/etc/docker"
+    - "/etc/systemd/system/docker.service.d"
+
+- name: Setting up daemon.json
+  template:
+    src: "etc/docker/daemon.json.j2"
+    dest: "/etc/docker/daemon.json"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  when: docker__default_daemon_json or docker__daemon_json
+  notify: ["Restart Docker"]
+
+- name: Setting Up docker Daemon
+  template:
+    src: "etc/systemd/system/docker.service.d/options.conf.j2"
+    dest: "/etc/systemd/system/docker.service.d/options.conf"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  register: docker__register_daemon_flags
+  when: docker__daemon_flags
+  notify: ["Restart Docker"]
+
+- name: Setting up docker Environment
+  template:
+    src: "etc/systemd/system/docker.service.d/environment.conf.j2"
+    dest: "/etc/systemd/system/docker.service.d/environment.conf"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  register: docker__register_daemon_environment
+  when: docker__daemon_environment
+  notify: ["Restart Docker"]
+
+- name: Customizing Systemd
+  template:
+    src: "etc/systemd/system/docker.service.d/custom.conf.j2"
+    dest: "/etc/systemd/system/docker.service.d/custom.conf"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  register: docker__register_custom_override
+  when: docker__systemd_override | d()
+  notify: ["Restart Docker"]
+
+- name: Reloading systemd
+  systemd:
+    daemon_reload: true
+  when: (docker__register_daemon_flags | d() and
+         docker__register_daemon_flags is changed)
+         or (docker__register_daemon_environment | d() and
+         docker__register_daemon_environment is changed)
+         or (docker__register_custom_override | d() and
+         docker__register_custom_override is changed)
+  notify: ["Restart Docker"]
+
+- name: Restarting docker
+  meta: "flush_handlers"
+
+- name: Login at setted registries
+  docker_login:
+    registry_url: "{{ item.registry_url | d(omit) }}"
+    username: "{{ item.username }}"
+    password: "{{ item.password }}"
+    email: "{{ item.email | d(omit) }}"
+    reauthorize: "{{ item.reauthorize | d(omit) }}"
+    config_path: "{{ item.config_path | d((ansible_env.PWD | d('/root')) + '/.docker/config.json') }}"
+    state: "{{ item.state | d('present') }}"
+  loop: "{{ docker__registries }}"
+  when: item.username | d() and item.password | d()
+  vars:
+    ansible_python_interpreter: "{{ '/usr/bin/env python-docker' if docker__pip_virtualenv | d() else ansible_python.executable }}"
+
+
+
+# - name: REMOVENDO Rede docker_gwbridge
+#   shell: docker network rm docker_gwbridge
+
+- name: Setting up docker_gwbridge
+  shell: docker network create --subnet "{{ docker__gwbridge_network }}" --opt com.docker.network.bridge.name=docker_gwbridge --opt com.docker.network.bridge.enable_icc=false --opt com.docker.network.bridge.enable_ip_masquerade=true docker_gwbridge

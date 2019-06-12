@@ -1,0 +1,88 @@
+version: '3.4'
+volumes:
+  portainerdata:
+    name: "{{ portainervol }}"
+    driver: vsphere
+    driver_opts:
+      size: 1Gb
+networks:
+  app:
+    external: true
+  portainer:
+    external: true
+services:
+  Frontman:
+    image: traefik
+    deploy:
+      placement:
+        constraints:
+         - node.role == manager
+    command: --docker --docker.swarmmode --docker.watch --api
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/traefik/cert:/cert
+      - /srv/traefik/conf/traefik.toml:/etc/traefik/traefik.toml
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "8080:8080"
+      - "80:80"
+      - "443:443"
+    networks:
+      - app
+  Visualizer:
+    image: dockersamples/visualizer:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.frontend.redirect.entryPoint=https"
+        - "traefik.port=8080"
+        - "traefik.docker.network=app"
+        - "traefik.frontend.rule=Host:visualizer.test.local"
+    networks:
+      - app
+  agent:
+    image: portainer/agent
+    networks:
+      - portainer
+    deploy:
+      mode: global
+      placement:
+        constraints: 
+          - node.platform.os == linux
+    ports:
+      - target: 9001
+        published: 9001
+        protocol: tcp
+        mode: host
+    environment:
+      - AGENT_CLUSTER_ADDR=tasks.lab
+      - CAP_HOST_MANAGEMENT=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+      - /etc/localtime:/etc/localtime:ro
+      - /:/host
+  Portainer:
+    image: portainer/portainer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/localtime:/etc/localtime:ro
+      - portainerdata:/data
+    networks:
+      - portainer
+      - app
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.port=9000"
+        - "traefik.docker.network=app"
+        - "traefik.frontend.redirect.entryPoint=https"
+        - "traefik.frontend.rule=Host:portainer.test.local"
